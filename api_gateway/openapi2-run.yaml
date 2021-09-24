@@ -13,7 +13,7 @@ x-google-backend:
 paths:
   /audio:
     post:
-      summary: Post audio_uri and additional metadata to the Google Toxicity Endpoint
+      summary: Send audio_uri and additional metadata to the Google Toxicity Endpoint
       operationId: audio
       responses:
         '200':
