@@ -1,0 +1,49 @@
+# openapi2-run.yaml
+swagger: '2.0'
+info:
+  title: google-toxicity "Google Toxicity"
+  description: Google Toxicity Endpoint
+  version: 1.0.0
+schemes:
+- https
+produces:
+- application/json
+x-google-backend:
+  address: https://audio-input-cyj7y6zvsq-ue.a.run.app
+paths:
+  /audio:
+    post:
+      summary: Post audio_uri and additional metadata to the Google Toxicity Endpoint
+      operationId: audio
+      responses:
+        '200':
+          description: Sucessfully passed audio_uri as json payload
+          schema:
+            type: string
+        '400':
+          description: Failed to submit audio_uri as json payload
+          schema:
+            type: string
+      consumes:
+        - application/json
+      produces:
+        - application/json
+        - text/xml
+        - text/html
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            # Body schema with atomic property examples
+            type: object
+            properties:
+              audio_uri:
+                type: string
+                example: 'https://mydomain.com/file.mp3'
+              other_metadata_field1:
+                type: string
+                example: 'other metadata 1'
+              other_metadata_field2:
+                type: string
+                example: 'other metadata 2'
