@@ -1,11 +1,16 @@
 import requests
 import re
 import json
+import io
+from flask import Flask, request
 from google.cloud import storage
 from google.cloud.storage.blob import Blob
-from flask import Flask, request
+from google.cloud import speech
 
 app = Flask(__name__)
+
+bucket_name = 'globalgame-assets'
+speech_client = speech.SpeechClient()
 
 def gcp_storage_upload_string(source_string, bucket_name, blob_name):
     try:
@@ -17,6 +22,26 @@ def gcp_storage_upload_string(source_string, bucket_name, blob_name):
     except Exception as e:
         print(f'[ ERROR ] Failed to upload to GCS. {e}')
 
+def speech_to_text_short(gcs_uri):
+    '''
+    Google Cloud Speech-to-Text (short audio)
+    '''
+    audio = speech.RecognitionAudio(uri=gcs_uri)
+    config = speech.RecognitionConfig(
+        #encoding=speech.RecognitionConfig.AudioEncoding.FLAC,
+        #sample_rate_hertz=16000,
+        language_code="en-US",
+        enable_automatic_punctuation=True,
+    )
+    
+    response = speech_client.recognize(config=config, audio=audio)
+    
+    sentences = []
+    for result in response.results:
+        sentences.append(result.alternatives[0].transcript)
+    
+    return sentences
+
 @app.route("/audio", methods = ['GET','POST'])
 def audio():
     
@@ -24,23 +49,35 @@ def audio():
         try:
             payload   = request.get_json()
             audio_uri = payload['audio_uri']
-            print(f'''[ INFO ] Request payload: {payload}''')
+            print(f'''[ INFO ] User-provided payload: {payload}''')
             
             req = requests.get(audio_uri)
-            print(f'[ INFO ] Reg status code: {req.status_code}')
+            print(f'[ INFO ] Requested audio file. Status code: {req.status_code}')
             if req.status_code == 200:
                 
                 # Write audio to GCS so that STT can be ran against this file.
                 audio_filename = audio_uri.split('/')[-1]
-                gcp_storage_upload_string(req.content, bucket_name='globalgame-assets', blob_name=audio_filename)
+                gcp_storage_upload_string(req.content, bucket_name=bucket_name, blob_name=audio_filename)
+                
+                # GCS Path
+                gcs_uri = f'gs://{bucket_name}/{audio_filename}'
                 
                 # Write audio payload to GCS
+                print(f'[ INFO ] Writing {gcs_uri}')
                 audio_payload_filename = re.sub('\.[a-zA-Z0-9]{2,4}$','',audio_uri.split('/')[-1])+'.json'
-                gcp_storage_upload_string(json.dumps(payload), bucket_name='globalgame-assets', blob_name=audio_payload_filename)
+                gcp_storage_upload_string(json.dumps(payload), bucket_name=bucket_name, blob_name=audio_payload_filename)
                 
-                return f'''{audio_uri} has been processed''', 200
+                # Speech-to-Text
+                print(f'[ INFO ] Performing Speech-to-Text against {gcs_uri}')
+                sentences = speech_to_text_short(gcs_uri=gcs_uri)
+                transcript = ' '.join(sentences)
+                
+                print(f'''[ INFO ] {audio_uri} has been processed''')
+                return transcript, 200
             else:
-                return f'Failed to get {audio_uri}', req.status_code
+                msg = f'Failed to get {audio_uri}. Status Code: {req.status_code}. {req.content}'
+                print(f'''[ ERROR ] {msg}''')
+                return msg, req.status_code
         except Exception as e:
             return f'{e}', 400
 
