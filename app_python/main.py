@@ -2,6 +2,7 @@ import requests
 import re
 import json
 import io
+import subprocess
 from flask import Flask, request
 from google.cloud import storage
 from google.cloud.storage.blob import Blob
@@ -18,6 +19,16 @@ def gcp_storage_upload_string(source_string, bucket_name, blob_name):
         bucket = storage_client.get_bucket(bucket_name)
         blob = bucket.blob(blob_name)
         blob.upload_from_string(source_string)
+        print(f'[ INFO ] Uploaded {blob_name} to GCS bucket {bucket_name}')
+    except Exception as e:
+        print(f'[ ERROR ] Failed to upload to GCS. {e}')
+
+def gcp_storage_upload_filename(filename, bucket_name, blob_name):
+    try:
+        storage_client = storage.Client()
+        bucket = storage_client.get_bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        blob.upload_from_filename(filename)
         print(f'[ INFO ] Uploaded {blob_name} to GCS bucket {bucket_name}')
     except Exception as e:
         print(f'[ ERROR ] Failed to upload to GCS. {e}')
@@ -42,6 +53,20 @@ def speech_to_text_short(gcs_uri):
     
     return sentences
 
+def download_online_file(response, saved_filename):
+    '''
+    "response" comes from requests.get or request.post response
+    '''
+    if response.status_code == 200:
+        print(f'[ INFO ] Saving {response.url} as {saved_filename}')
+        with open(saved_filename, 'wb') as f:
+            #f.write(response.content)
+            for chunk in response.iter_content(chunk_size=1024): 
+                if chunk:
+                    f.write(chunk)
+    
+    return None
+
 @app.route("/audio", methods = ['GET','POST'])
 def audio():
     
@@ -51,13 +76,22 @@ def audio():
             audio_uri = payload['audio_uri']
             print(f'''[ INFO ] User-provided payload: {payload}''')
             
-            req = requests.get(audio_uri)
-            print(f'[ INFO ] Requested audio file. Status code: {req.status_code}')
+            response = requests.get(audio_uri)
+            print(f'[ INFO ] Requested audio file. Status code: {response.status_code}')
             if req.status_code == 200:
                 
-                # Write audio to GCS so that STT can be ran against this file.
                 audio_filename = audio_uri.split('/')[-1]
-                gcp_storage_upload_string(req.content, bucket_name=bucket_name, blob_name=audio_filename)
+                
+                # Write audio to GCS so that STT can be ran against this file.
+                if re.search('\.mp3$',audio_filename):
+                    # Save audio file
+                    download_online_file(response=response, saved_filename=audio_filename)
+                    # Convert mp3 to flac
+                    subprocess.call(['ffmpeg', '-i', audio_filename, audio_filename.lower().replace('.mp3','.flac')])
+                    audio_filename = audio_filename.lower().replace('.mp3','.flac')
+                    gcp_storage_upload_filename(filename=audio_filename, bucket_name=bucket_name, blob_name=audio_filename)
+                else:
+                    gcp_storage_upload_string(response.content, bucket_name=bucket_name, blob_name=audio_filename)
                 
                 # GCS Path
                 gcs_uri = f'gs://{bucket_name}/{audio_filename}'
@@ -75,9 +109,9 @@ def audio():
                 print(f'''[ INFO ] {audio_uri} has been processed''')
                 return transcript, 200
             else:
-                msg = f'Failed to get {audio_uri}. Status Code: {req.status_code}. {req.content}'
+                msg = f'Failed to get {audio_uri}. Status Code: {response.status_code}. {response.content}'
                 print(f'''[ ERROR ] {msg}''')
-                return msg, req.status_code
+                return msg, response.status_code
         except Exception as e:
             return f'{e}', 400
 

@@ -16,6 +16,8 @@ ENV PYTHONUNBUFFERED True
 
 WORKDIR /app
 
+RUN apt-get update && apt-get -y install ffmpeg 
+
 COPY . ./
 
 RUN pip install --no-cache-dir -r requirements.txt
