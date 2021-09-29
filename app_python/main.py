@@ -78,27 +78,27 @@ def audio():
             
             response = requests.get(audio_uri)
             print(f'[ INFO ] Requested audio file. Status code: {response.status_code}')
-            if req.status_code == 200:
+            if response.status_code == 200:
                 
                 audio_filename = audio_uri.split('/')[-1]
                 
                 # Write audio to GCS so that STT can be ran against this file.
-                if re.search('\.mp3$',audio_filename):
+                if True: # re.search('\.mp3$',audio_filename):
                     # Save audio file
                     download_online_file(response=response, saved_filename=audio_filename)
-                    # Convert mp3 to flac
-                    subprocess.call(['ffmpeg', '-c:a', 'flac', '-compression_level', '12', '-i', audio_filename, audio_filename.lower().replace('.mp3','.flac')])
-                    audio_filename = audio_filename.lower().replace('.mp3','.flac')
-                    gcp_storage_upload_filename(filename=audio_filename, bucket_name=bucket_name, blob_name=audio_filename)
-                else:
+                    # Upload raw (initial) audio file
                     gcp_storage_upload_string(response.content, bucket_name=bucket_name, blob_name=audio_filename)
+                    # Convert mp3 to flac
+                    audio_filename_flac = re.sub('\.[a-z0-9]+$','.flac',audio_filename.lower())
+                    subprocess.call(['ffmpeg', '-i', audio_filename, '-ac', '1', audio_filename_flac])
+                    gcp_storage_upload_filename(filename=audio_filename_flac, bucket_name=bucket_name, blob_name=audio_filename_flac)
                 
                 # GCS Path
-                gcs_uri = f'gs://{bucket_name}/{audio_filename}'
+                gcs_uri = f'gs://{bucket_name}/{audio_filename_flac}'
                 
                 # Write audio payload to GCS
-                print(f'[ INFO ] Writing {gcs_uri}')
-                audio_payload_filename = re.sub('\.[a-zA-Z0-9]{2,4}$','',audio_uri.split('/')[-1])+'.json'
+                audio_payload_filename = re.sub('\.[a-z0-9]+$', '.json', audio_uri.lower().split('/')[-1])
+                print(f'[ INFO ] Writing {audio_payload_filename} to GCS')
                 gcp_storage_upload_string(json.dumps(payload), bucket_name=bucket_name, blob_name=audio_payload_filename)
                 
                 # Speech-to-Text
