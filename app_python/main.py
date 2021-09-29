@@ -87,7 +87,7 @@ def audio():
                     # Save audio file
                     download_online_file(response=response, saved_filename=audio_filename)
                     # Convert mp3 to flac
-                    subprocess.call(['ffmpeg', '-i', audio_filename, audio_filename.lower().replace('.mp3','.flac')])
+                    subprocess.call(['ffmpeg', '-c:a', 'flac', '-compression_level', '12', '-i', audio_filename, audio_filename.lower().replace('.mp3','.flac')])
                     audio_filename = audio_filename.lower().replace('.mp3','.flac')
                     gcp_storage_upload_filename(filename=audio_filename, bucket_name=bucket_name, blob_name=audio_filename)
                 else:

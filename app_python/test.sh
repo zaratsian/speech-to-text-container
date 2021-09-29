@@ -1,0 +1,1 @@
+python3 test.py --endpoint https://audio-input-cyj7y6zvsq-ue.a.run.app/audio --json_payload {"audio_uri":"https://github.com/zaratsian/speech-to-text-container/samples/raw/master/otherguys_clip1.mp3"}
